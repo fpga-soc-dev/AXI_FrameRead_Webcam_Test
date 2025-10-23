@@ -34,7 +34,7 @@ set_property -dict {PACKAGE_PIN J19 IOSTANDARD TMDS_33} [get_ports {HDMI_OUT_DAT
 set_property -dict {PACKAGE_PIN K19 IOSTANDARD TMDS_33} [get_ports {HDMI_OUT_DATA_P[1]}]
 set_property -dict {PACKAGE_PIN H18 IOSTANDARD TMDS_33} [get_ports {HDMI_OUT_DATA_N[2]}]
 set_property -dict {PACKAGE_PIN J18 IOSTANDARD TMDS_33} [get_ports {HDMI_OUT_DATA_P[2]}]
-set_property -dict {PACKAGE_PIN R19 IOSTANDARD LVCMOS33} [get_ports {HDMI_OUT_HPD[0]}]
+set_property -dict {PACKAGE_PIN R19 IOSTANDARD LVCMOS33} [get_ports {HDMI_HPD}]
 set_property -dict {PACKAGE_PIN M17 IOSTANDARD LVCMOS33} [get_ports HDMI_OUT_DDC_SCL]
 set_property -dict {PACKAGE_PIN M18 IOSTANDARD LVCMOS33} [get_ports HDMI_OUT_DDC_SDA]
 

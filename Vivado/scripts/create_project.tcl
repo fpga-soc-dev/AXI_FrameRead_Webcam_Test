@@ -8,6 +8,9 @@ create_project ${project_name} ${vivado_dir} -part ${part}
 
 set proj_dir [get_property directory [current_project]]
 
+puts "INFO: Adding custom IP repository..."
+set_property  ip_repo_paths  custom_ips/ [current_project]
+update_ip_catalog
 
 set_property "default_lib"        "xil_defaultlib" [current_project]
 set_property "part"               "${part}"        [current_project]

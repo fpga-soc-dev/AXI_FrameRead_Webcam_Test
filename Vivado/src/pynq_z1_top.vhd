@@ -61,7 +61,7 @@ entity pynq_z1_top is
     HDMI_OUT_CLK_P    : out std_logic;
     HDMI_OUT_DATA_N   : out std_logic_vector(2 downto 0);
     HDMI_OUT_DATA_P   : out std_logic_vector(2 downto 0);
-    HDMI_OUT_HPD      : out std_logic_vector(0 downto 0);
+    HDMI_HPD          : in std_logic;
     HDMI_OUT_DDC_SCL  : inout std_logic;
     HDMI_OUT_DDC_SDA  : inout std_logic
   );
@@ -108,7 +108,9 @@ architecture rtl of pynq_z1_top is
       hdmi_out_ddc_sda_i : in STD_LOGIC;
       hdmi_out_ddc_sda_o : out STD_LOGIC;
       hdmi_out_ddc_sda_t : out STD_LOGIC;
-      hdmi_out_hpd       : out STD_LOGIC_VECTOR ( 0 to 0 )
+      hdmi_out_hpd_tri_i : in std_logic_vector ( 0 downto 0 );
+      
+      LED2               : out std_logic
             
       
     );
@@ -126,6 +128,8 @@ architecture rtl of pynq_z1_top is
   signal hdmi_out_ddc_sda_i : std_logic;
   signal hdmi_out_ddc_sda_o : std_logic;
   signal hdmi_out_ddc_sda_t : std_logic;
+  
+  signal hdmi_hpd_sig       : std_logic_vector ( 0 downto 0 );
     
 
   ----------------------------------------------------------------------------------------------------
@@ -161,20 +165,26 @@ begin
       FIXED_IO_mio(53 downto 0) => FIXED_IO_mio(53 downto 0),
       FIXED_IO_ps_clk           => FIXED_IO_ps_clk,
       FIXED_IO_ps_porb          => FIXED_IO_ps_porb,
-      FIXED_IO_ps_srstb         => FIXED_IO_ps_srstb ,
+      FIXED_IO_ps_srstb         => FIXED_IO_ps_srstb,
+      
       HDMI_OUT_CLK_N            => hdmi_out_clk_n,
       HDMI_OUT_CLK_P            => hdmi_out_clk_p, 
       HDMI_OUT_DATA_N           => hdmi_out_data_n,
-      HDMI_OUT_DATA_P           => hdmi_out_data_p,
-      HDMI_OUT_HPD              => hdmi_out_hpd,
+      HDMI_OUT_DATA_P           => hdmi_out_data_p,    
+      hdmi_out_hpd_tri_i        => hdmi_hpd_sig,
+      
       hdmi_out_ddc_scl_i        => hdmi_out_ddc_scl_i,
       hdmi_out_ddc_scl_o        => hdmi_out_ddc_scl_o,
       hdmi_out_ddc_scl_t        => hdmi_out_ddc_scl_t,
+      
       hdmi_out_ddc_sda_i        => hdmi_out_ddc_sda_i,
       hdmi_out_ddc_sda_o        => hdmi_out_ddc_sda_o,
-      hdmi_out_ddc_sda_t        =>hdmi_out_ddc_sda_t      
+      hdmi_out_ddc_sda_t        => hdmi_out_ddc_sda_t,
+      
+      LED2                      => LED2      
     );
     
+    hdmi_hpd_sig(0) <= HDMI_HPD;
     
     DDC_scl_iobuf: component IOBUF
     port map (

@@ -124,16 +124,16 @@ if { $bCheckIPs == 1 } {
    set list_check_ips "\ 
 xilinx.com:ip:processing_system7:*\
 xilinx.com:ip:proc_sys_reset:*\
-xilinx.com:ip:xlconcat:*\
 xilinx.com:ip:smartconnect:*\
-xilinx.com:ip:axi_gpio:*\
-xilinx.com:ip:v_frmbuf_rd:*\
+xilinx.com:ip:xlconcat:*\
 xilinx.com:ip:xlslice:*\
-xilinx.com:ip:axis_dwidth_converter:*\
-xilinx.com:ip:clk_wiz:*\
+xilinx.com:ip:v_frmbuf_rd:*\
+xilinx.com:ip:c_counter_binary:*\
+xilinx.com:ip:axi_gpio:*\
+digilentinc.com:ip:rgb2dvi:*\
 xilinx.com:ip:v_axi4s_vid_out:*\
-user.org:user:hdmi_out_ip:*\
 xilinx.com:ip:v_tc:*\
+xilinx.com:ip:clk_wiz:*\
 "
 
    set list_ips_missing ""
@@ -163,13 +163,13 @@ if { $bCheckIPsPassed != 1 } {
 ##################################################################
 
 
-# Hierarchical cell: video_hdmi_out_top
-proc create_hier_cell_video_hdmi_out_top { parentCell nameHier } {
+# Hierarchical cell: hdmi_out_top
+proc create_hier_cell_hdmi_out_top { parentCell nameHier } {
 
   variable script_folder
 
   if { $parentCell eq "" || $nameHier eq "" } {
-     catch {common::send_gid_msg -ssname BD::TCL -id 2092 -severity "ERROR" "create_hier_cell_video_hdmi_out_top() - Empty argument(s)!"}
+     catch {common::send_gid_msg -ssname BD::TCL -id 2092 -severity "ERROR" "create_hier_cell_hdmi_out_top() - Empty argument(s)!"}
      return
   }
 
@@ -198,23 +198,44 @@ proc create_hier_cell_video_hdmi_out_top { parentCell nameHier } {
   current_bd_instance $hier_obj
 
   # Create interface pins
-  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 video_in
+  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 S_AXI
+
+  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 S_AXIS
 
   create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 ctrl
+
+  create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:gpio_rtl:1.0 hdmi_out_hpd
 
 
   # Create pins
   create_bd_pin -dir I -type clk aclk
-  create_bd_pin -dir I -type rst LED2
-  create_bd_pin -dir I -type clk vid_io_out_clk
-  create_bd_pin -dir O -from 2 -to 0 hdmi_out_data_p
-  create_bd_pin -dir O -from 2 -to 0 hdmi_out_data_n
+  create_bd_pin -dir I -type rst aresetn
   create_bd_pin -dir O -type clk hdmi_out_clk_n
   create_bd_pin -dir O -type clk hdmi_out_clk_p
-  create_bd_pin -dir I clk_pixel_x5
-  create_bd_pin -dir I -type rst s_axi_aresetn
+  create_bd_pin -dir O -from 2 -to 0 hdmi_out_data_n
+  create_bd_pin -dir O -from 2 -to 0 hdmi_out_data_p
+  create_bd_pin -dir O -type intr ip2intc_irpt
   create_bd_pin -dir O -type intr irq
-  create_bd_pin -dir I -type rst resetn
+  create_bd_pin -dir I -type rst s_axi_aresetn
+  create_bd_pin -dir O LED2
+  create_bd_pin -dir O -type clk pxl_clk5
+
+  # Create instance: axi_gpio_0, and set properties
+  set axi_gpio_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio_0 ]
+  set_property -dict [list \
+    CONFIG.C_ALL_INPUTS {1} \
+    CONFIG.C_GPIO_WIDTH {1} \
+    CONFIG.C_INTERRUPT_PRESENT {1} \
+  ] $axi_gpio_0
+
+
+  # Create instance: rgb2dvi_0, and set properties
+  set rgb2dvi_0 [ create_bd_cell -type ip -vlnv digilentinc.com:ip:rgb2dvi rgb2dvi_0 ]
+  set_property -dict [list \
+    CONFIG.kGenerateSerialClk {false} \
+    CONFIG.kRstActiveHigh {false} \
+  ] $rgb2dvi_0
+
 
   # Create instance: v_axi4s_vid_out_0, and set properties
   set v_axi4s_vid_out_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:v_axi4s_vid_out v_axi4s_vid_out_0 ]
@@ -222,63 +243,86 @@ proc create_hier_cell_video_hdmi_out_top { parentCell nameHier } {
     CONFIG.C_ADDR_WIDTH {13} \
     CONFIG.C_HAS_ASYNC_CLK {1} \
     CONFIG.C_S_AXIS_VIDEO_DATA_WIDTH {8} \
-    CONFIG.C_S_AXIS_VIDEO_FORMAT {6} \
+    CONFIG.C_S_AXIS_VIDEO_FORMAT {2} \
     CONFIG.C_VTG_MASTER_SLAVE {0} \
   ] $v_axi4s_vid_out_0
 
-
-  # Create instance: hdmi_out_ip_0, and set properties
-  set hdmi_out_ip_0 [ create_bd_cell -type ip -vlnv user.org:user:hdmi_out_ip hdmi_out_ip_0 ]
 
   # Create instance: v_tc_0, and set properties
   set v_tc_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:v_tc v_tc_0 ]
   set_property -dict [list \
     CONFIG.enable_detection {false} \
-    CONFIG.max_clocks_per_line {2048} \
-    CONFIG.max_lines_per_frame {2048} \
+    CONFIG.max_clocks_per_line {4096} \
+    CONFIG.max_lines_per_frame {4096} \
   ] $v_tc_0
 
 
+  # Create instance: clk_hdmi_720p, and set properties
+  set clk_hdmi_720p [ create_bd_cell -type ip -vlnv xilinx.com:ip:clk_wiz clk_hdmi_720p ]
+  set_property -dict [list \
+    CONFIG.CLKOUT1_JITTER {337.616} \
+    CONFIG.CLKOUT1_PHASE_ERROR {322.999} \
+    CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {74.25} \
+    CONFIG.CLKOUT2_JITTER {258.703} \
+    CONFIG.CLKOUT2_PHASE_ERROR {322.999} \
+    CONFIG.CLKOUT2_REQUESTED_OUT_FREQ {371.25} \
+    CONFIG.CLKOUT2_USED {true} \
+    CONFIG.CLK_OUT1_PORT {pxl_clk} \
+    CONFIG.CLK_OUT2_PORT {pxl_clk5} \
+    CONFIG.MMCM_CLKFBOUT_MULT_F {37.125} \
+    CONFIG.MMCM_CLKOUT0_DIVIDE_F {10.000} \
+    CONFIG.MMCM_CLKOUT1_DIVIDE {2} \
+    CONFIG.MMCM_DIVCLK_DIVIDE {5} \
+    CONFIG.NUM_OUT_CLKS {2} \
+    CONFIG.RESET_PORT {resetn} \
+    CONFIG.RESET_TYPE {ACTIVE_LOW} \
+  ] $clk_hdmi_720p
+
+
   # Create interface connections
-  connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins v_tc_0/ctrl] [get_bd_intf_pins ctrl]
-  connect_bd_intf_net -intf_net axis_dwidth_converter_0_M_AXIS [get_bd_intf_pins video_in] [get_bd_intf_pins v_axi4s_vid_out_0/video_in]
+  connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins ctrl] [get_bd_intf_pins v_tc_0/ctrl]
+  connect_bd_intf_net -intf_net Conn4 [get_bd_intf_pins S_AXI] [get_bd_intf_pins axi_gpio_0/S_AXI]
+  connect_bd_intf_net -intf_net Conn5 [get_bd_intf_pins hdmi_out_hpd] [get_bd_intf_pins axi_gpio_0/GPIO]
+  connect_bd_intf_net -intf_net S_AXIS_1 [get_bd_intf_pins S_AXIS] [get_bd_intf_pins v_axi4s_vid_out_0/video_in]
+  connect_bd_intf_net -intf_net v_axi4s_vid_out_0_vid_io_out [get_bd_intf_pins rgb2dvi_0/RGB] [get_bd_intf_pins v_axi4s_vid_out_0/vid_io_out]
   connect_bd_intf_net -intf_net v_tc_0_vtiming_out [get_bd_intf_pins v_axi4s_vid_out_0/vtiming_in] [get_bd_intf_pins v_tc_0/vtiming_out]
 
   # Create port connections
-  connect_bd_net -net axi_dynclk_0_PXL_CLK_O  [get_bd_pins vid_io_out_clk] \
-  [get_bd_pins v_axi4s_vid_out_0/vid_io_out_clk] \
-  [get_bd_pins hdmi_out_ip_0/clk_pixel] \
-  [get_bd_pins v_tc_0/clk] \
-  [get_bd_pins hdmi_out_ip_0/clk_audio]
-  connect_bd_net -net clk_pixel_x5_1  [get_bd_pins clk_pixel_x5] \
-  [get_bd_pins hdmi_out_ip_0/clk_pixel_x5]
-  connect_bd_net -net hdmi_out_ip_0_TMDS2_clk_n  [get_bd_pins hdmi_out_ip_0/TMDS2_clk_n] \
-  [get_bd_pins hdmi_out_clk_n]
-  connect_bd_net -net hdmi_out_ip_0_TMDS2_clk_p  [get_bd_pins hdmi_out_ip_0/TMDS2_clk_p] \
-  [get_bd_pins hdmi_out_clk_p]
-  connect_bd_net -net hdmi_out_ip_0_TMDS2_data_n  [get_bd_pins hdmi_out_ip_0/TMDS2_data_n] \
-  [get_bd_pins hdmi_out_data_n]
-  connect_bd_net -net hdmi_out_ip_0_TMDS2_data_p  [get_bd_pins hdmi_out_ip_0/TMDS2_data_p] \
-  [get_bd_pins hdmi_out_data_p]
-  connect_bd_net -net ps7_0_FCLK_CLK0  [get_bd_pins aclk] \
+  connect_bd_net -net aclk_1  [get_bd_pins aclk] \
+  [get_bd_pins axi_gpio_0/s_axi_aclk] \
   [get_bd_pins v_axi4s_vid_out_0/aclk] \
-  [get_bd_pins v_tc_0/s_axi_aclk]
-  connect_bd_net -net resetn_1  [get_bd_pins resetn] \
-  [get_bd_pins v_tc_0/resetn]
+  [get_bd_pins v_tc_0/s_axi_aclk] \
+  [get_bd_pins clk_hdmi_720p/clk_in1]
+  connect_bd_net -net aresetn_1  [get_bd_pins aresetn] \
+  [get_bd_pins v_axi4s_vid_out_0/aresetn] \
+  [get_bd_pins v_tc_0/s_axi_aresetn] \
+  [get_bd_pins clk_hdmi_720p/resetn]
+  connect_bd_net -net axi_gpio_0_ip2intc_irpt  [get_bd_pins axi_gpio_0/ip2intc_irpt] \
+  [get_bd_pins ip2intc_irpt]
+  connect_bd_net -net clk_hdmi_720p_locked  [get_bd_pins clk_hdmi_720p/locked] \
+  [get_bd_pins rgb2dvi_0/aRst_n] \
+  [get_bd_pins LED2]
+  connect_bd_net -net clk_hdmi_720p_pxl_clk  [get_bd_pins clk_hdmi_720p/pxl_clk] \
+  [get_bd_pins rgb2dvi_0/PixelClk] \
+  [get_bd_pins v_axi4s_vid_out_0/vid_io_out_clk] \
+  [get_bd_pins v_tc_0/clk]
+  connect_bd_net -net clk_hdmi_720p_pxl_clk5  [get_bd_pins clk_hdmi_720p/pxl_clk5] \
+  [get_bd_pins rgb2dvi_0/SerialClk] \
+  [get_bd_pins pxl_clk5]
+  connect_bd_net -net rgb2dvi_0_TMDS_Clk_n  [get_bd_pins rgb2dvi_0/TMDS_Clk_n] \
+  [get_bd_pins hdmi_out_clk_n]
+  connect_bd_net -net rgb2dvi_0_TMDS_Clk_p  [get_bd_pins rgb2dvi_0/TMDS_Clk_p] \
+  [get_bd_pins hdmi_out_clk_p]
+  connect_bd_net -net rgb2dvi_0_TMDS_Data_n  [get_bd_pins rgb2dvi_0/TMDS_Data_n] \
+  [get_bd_pins hdmi_out_data_n]
+  connect_bd_net -net rgb2dvi_0_TMDS_Data_p  [get_bd_pins rgb2dvi_0/TMDS_Data_p] \
+  [get_bd_pins hdmi_out_data_p]
   connect_bd_net -net s_axi_aresetn_1  [get_bd_pins s_axi_aresetn] \
-  [get_bd_pins v_tc_0/s_axi_aresetn]
-  connect_bd_net -net v_axi4s_vid_out_0_locked  [get_bd_pins v_axi4s_vid_out_0/locked] \
-  [get_bd_pins hdmi_out_ip_0/aresetn]
-  connect_bd_net -net v_axi4s_vid_out_0_vid_active_video  [get_bd_pins v_axi4s_vid_out_0/vid_active_video] \
-  [get_bd_pins hdmi_out_ip_0/video_enable]
-  connect_bd_net -net v_axi4s_vid_out_0_vid_data  [get_bd_pins v_axi4s_vid_out_0/vid_data] \
-  [get_bd_pins hdmi_out_ip_0/rgb]
+  [get_bd_pins axi_gpio_0/s_axi_aresetn]
   connect_bd_net -net v_axi4s_vid_out_0_vtg_ce  [get_bd_pins v_axi4s_vid_out_0/vtg_ce] \
   [get_bd_pins v_tc_0/gen_clken]
   connect_bd_net -net v_tc_0_irq  [get_bd_pins v_tc_0/irq] \
   [get_bd_pins irq]
-  connect_bd_net -net xlslice_0_Dout  [get_bd_pins LED2] \
-  [get_bd_pins v_axi4s_vid_out_0/aresetn]
 
   # Restore current instance
   current_bd_instance $oldCurInst
@@ -333,11 +377,16 @@ proc create_root_design { parentCell } {
    CONFIG.ASSOCIATED_RESET {FCLK_RESETN} \
  ] $CLK_100
   set FCLK_RESETN [ create_bd_port -dir O -type rst FCLK_RESETN ]
-  set hdmi_out_clk_p [ create_bd_port -dir O -type clk hdmi_out_clk_p ]
-  set hdmi_out_clk_n [ create_bd_port -dir O -type clk hdmi_out_clk_n ]
-  set hdmi_out_data_p [ create_bd_port -dir O -from 2 -to 0 hdmi_out_data_p ]
-  set hdmi_out_data_n [ create_bd_port -dir O -from 2 -to 0 hdmi_out_data_n ]
   set LED2 [ create_bd_port -dir O -from 0 -to 0 LED2 ]
+  set hdmi_out_clk_n [ create_bd_port -dir O -type clk hdmi_out_clk_n ]
+  set hdmi_out_clk_p [ create_bd_port -dir O -type clk hdmi_out_clk_p ]
+  set hdmi_out_data_n [ create_bd_port -dir O -from 2 -to 0 hdmi_out_data_n ]
+  set hdmi_out_data_p [ create_bd_port -dir O -from 2 -to 0 hdmi_out_data_p ]
+  set LED3 [ create_bd_port -dir O -from 0 -to 0 LED3 ]
+  set LED4 [ create_bd_port -dir O -from 0 -to 0 LED4 ]
+
+  # Create instance: hdmi_out_top
+  create_hier_cell_hdmi_out_top [current_bd_instance .] hdmi_out_top
 
   # Create instance: ps7_0, and set properties
   set ps7_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7 ps7_0 ]
@@ -876,26 +925,22 @@ proc create_root_design { parentCell } {
   # Create instance: rst_ps7_0_fclk1, and set properties
   set rst_ps7_0_fclk1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset rst_ps7_0_fclk1 ]
 
-  # Create instance: xlconcat_0, and set properties
-  set xlconcat_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat xlconcat_0 ]
-  set_property CONFIG.NUM_PORTS {2} $xlconcat_0
-
-
   # Create instance: smartconnect_1, and set properties
   set smartconnect_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect_1 ]
   set_property -dict [list \
-    CONFIG.NUM_MI {4} \
+    CONFIG.NUM_MI {3} \
     CONFIG.NUM_SI {1} \
   ] $smartconnect_1
 
 
-  # Create instance: axi_gpio_0, and set properties
-  set axi_gpio_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio_0 ]
-  set_property -dict [list \
-    CONFIG.C_ALL_INPUTS {1} \
-    CONFIG.C_GPIO_WIDTH {1} \
-    CONFIG.C_INTERRUPT_PRESENT {1} \
-  ] $axi_gpio_0
+  # Create instance: xlconcat_0, and set properties
+  set xlconcat_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat xlconcat_0 ]
+  set_property CONFIG.NUM_PORTS {3} $xlconcat_0
+
+
+  # Create instance: xlslice_0, and set properties
+  set xlslice_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice xlslice_0 ]
+  set_property CONFIG.DIN_WIDTH {2} $xlslice_0
 
 
   # Create instance: v_frmbuf_rd_0, and set properties
@@ -904,7 +949,6 @@ proc create_root_design { parentCell } {
     CONFIG.HAS_ALPHA {0} \
     CONFIG.HAS_BGR8 {1} \
     CONFIG.HAS_BGRX8 {1} \
-    CONFIG.HAS_INTERLACED {0} \
     CONFIG.HAS_RGB8 {1} \
     CONFIG.HAS_RGBX8 {1} \
     CONFIG.HAS_UYVY8 {1} \
@@ -916,23 +960,10 @@ proc create_root_design { parentCell } {
     CONFIG.HAS_Y_UV8_420 {1} \
     CONFIG.HAS_Y_U_V8 {1} \
     CONFIG.HAS_Y_U_V8_420 {1} \
-    CONFIG.MAX_COLS {1280} \
-    CONFIG.MAX_ROWS {720} \
+    CONFIG.MAX_COLS {1920} \
+    CONFIG.MAX_ROWS {1080} \
     CONFIG.SAMPLES_PER_CLOCK {1} \
   ] $v_frmbuf_rd_0
-
-
-  # Create instance: xlslice_0, and set properties
-  set xlslice_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice xlslice_0 ]
-  set_property CONFIG.DIN_WIDTH {2} $xlslice_0
-
-
-  # Create instance: axis_dwidth_converter_0, and set properties
-  set axis_dwidth_converter_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_dwidth_converter axis_dwidth_converter_0 ]
-  set_property -dict [list \
-    CONFIG.M_TDATA_NUM_BYTES {4} \
-    CONFIG.S_TDATA_NUM_BYTES {3} \
-  ] $axis_dwidth_converter_0
 
 
   # Create instance: axi_interconnect_0, and set properties
@@ -940,108 +971,92 @@ proc create_root_design { parentCell } {
   set_property CONFIG.NUM_MI {1} $axi_interconnect_0
 
 
-  # Create instance: clk_hdmi_720p, and set properties
-  set clk_hdmi_720p [ create_bd_cell -type ip -vlnv xilinx.com:ip:clk_wiz clk_hdmi_720p ]
+  # Create instance: c_counter_binary_0, and set properties
+  set c_counter_binary_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:c_counter_binary c_counter_binary_0 ]
+  set_property CONFIG.Output_Width {32} $c_counter_binary_0
+
+
+  # Create instance: xlslice_1, and set properties
+  set xlslice_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice xlslice_1 ]
   set_property -dict [list \
-    CONFIG.CLKOUT1_JITTER {337.616} \
-    CONFIG.CLKOUT1_PHASE_ERROR {322.999} \
-    CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {74.25} \
-    CONFIG.CLKOUT2_JITTER {258.703} \
-    CONFIG.CLKOUT2_PHASE_ERROR {322.999} \
-    CONFIG.CLKOUT2_REQUESTED_OUT_FREQ {371.25} \
-    CONFIG.CLKOUT2_USED {true} \
-    CONFIG.CLK_OUT1_PORT {pxl_clk} \
-    CONFIG.CLK_OUT2_PORT {pxl_clk5} \
-    CONFIG.MMCM_CLKFBOUT_MULT_F {37.125} \
-    CONFIG.MMCM_CLKOUT0_DIVIDE_F {10.000} \
-    CONFIG.MMCM_CLKOUT1_DIVIDE {2} \
-    CONFIG.MMCM_DIVCLK_DIVIDE {5} \
-    CONFIG.NUM_OUT_CLKS {2} \
-    CONFIG.RESET_PORT {resetn} \
-    CONFIG.RESET_TYPE {ACTIVE_LOW} \
-  ] $clk_hdmi_720p
+    CONFIG.DIN_FROM {24} \
+    CONFIG.DIN_TO {24} \
+  ] $xlslice_1
 
-
-  # Create instance: video_hdmi_out_top
-  create_hier_cell_video_hdmi_out_top [current_bd_instance .] video_hdmi_out_top
 
   # Create interface connections
-  connect_bd_intf_net -intf_net axi_gpio_0_GPIO [get_bd_intf_ports hdmi_out_hpd] [get_bd_intf_pins axi_gpio_0/GPIO]
   connect_bd_intf_net -intf_net axi_interconnect_0_M00_AXI [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins ps7_0/S_AXI_HP0]
-  connect_bd_intf_net -intf_net axis_dwidth_converter_0_M_AXIS [get_bd_intf_pins axis_dwidth_converter_0/M_AXIS] [get_bd_intf_pins video_hdmi_out_top/video_in]
+  connect_bd_intf_net -intf_net hdmi_out_top_hdmi_out_hpd [get_bd_intf_ports hdmi_out_hpd] [get_bd_intf_pins hdmi_out_top/hdmi_out_hpd]
   connect_bd_intf_net -intf_net ps7_0_DDR [get_bd_intf_ports DDR] [get_bd_intf_pins ps7_0/DDR]
   connect_bd_intf_net -intf_net ps7_0_FIXED_IO [get_bd_intf_ports FIXED_IO] [get_bd_intf_pins ps7_0/FIXED_IO]
   connect_bd_intf_net -intf_net ps7_0_IIC_0 [get_bd_intf_ports hdmi_out_ddc] [get_bd_intf_pins ps7_0/IIC_0]
   connect_bd_intf_net -intf_net ps7_0_M_AXI_GP0 [get_bd_intf_pins ps7_0/M_AXI_GP0] [get_bd_intf_pins smartconnect_1/S00_AXI]
   connect_bd_intf_net -intf_net smartconnect_1_M00_AXI [get_bd_intf_pins smartconnect_1/M00_AXI] [get_bd_intf_pins v_frmbuf_rd_0/s_axi_CTRL]
-  connect_bd_intf_net -intf_net smartconnect_1_M01_AXI [get_bd_intf_pins smartconnect_1/M01_AXI] [get_bd_intf_pins video_hdmi_out_top/ctrl]
-  connect_bd_intf_net -intf_net smartconnect_1_M03_AXI [get_bd_intf_pins axi_gpio_0/S_AXI] [get_bd_intf_pins smartconnect_1/M03_AXI]
+  connect_bd_intf_net -intf_net smartconnect_1_M01_AXI [get_bd_intf_pins hdmi_out_top/ctrl] [get_bd_intf_pins smartconnect_1/M01_AXI]
+  connect_bd_intf_net -intf_net smartconnect_1_M02_AXI [get_bd_intf_pins smartconnect_1/M02_AXI] [get_bd_intf_pins hdmi_out_top/S_AXI]
   connect_bd_intf_net -intf_net v_frmbuf_rd_0_m_axi_mm_video [get_bd_intf_pins v_frmbuf_rd_0/m_axi_mm_video] [get_bd_intf_pins axi_interconnect_0/S00_AXI]
-  connect_bd_intf_net -intf_net v_frmbuf_rd_0_m_axis_video [get_bd_intf_pins v_frmbuf_rd_0/m_axis_video] [get_bd_intf_pins axis_dwidth_converter_0/S_AXIS]
+  connect_bd_intf_net -intf_net v_frmbuf_rd_0_m_axis_video [get_bd_intf_pins v_frmbuf_rd_0/m_axis_video] [get_bd_intf_pins hdmi_out_top/S_AXIS]
 
   # Create port connections
-  connect_bd_net -net axi_dynclk_0_PXL_CLK_O  [get_bd_pins clk_hdmi_720p/pxl_clk] \
-  [get_bd_pins video_hdmi_out_top/vid_io_out_clk]
-  connect_bd_net -net clk_hdmi_720p_locked  [get_bd_pins clk_hdmi_720p/locked] \
-  [get_bd_pins video_hdmi_out_top/resetn]
-  connect_bd_net -net clk_hdmi_720p_pxl_clk5  [get_bd_pins clk_hdmi_720p/pxl_clk5] \
-  [get_bd_pins video_hdmi_out_top/clk_pixel_x5]
+  connect_bd_net -net c_counter_binary_0_Q  [get_bd_pins c_counter_binary_0/Q] \
+  [get_bd_pins xlslice_1/Din]
+  connect_bd_net -net hdmi_out_top_LED2  [get_bd_pins hdmi_out_top/LED2] \
+  [get_bd_ports LED2]
+  connect_bd_net -net hdmi_out_top_ip2intc_irpt  [get_bd_pins hdmi_out_top/ip2intc_irpt] \
+  [get_bd_pins xlconcat_0/In2]
+  connect_bd_net -net hdmi_out_top_irq  [get_bd_pins hdmi_out_top/irq] \
+  [get_bd_pins xlconcat_0/In1]
+  connect_bd_net -net hdmi_out_top_pxl_clk5  [get_bd_pins hdmi_out_top/pxl_clk5] \
+  [get_bd_pins c_counter_binary_0/CLK]
   connect_bd_net -net ps7_0_FCLK_CLK0  [get_bd_pins ps7_0/FCLK_CLK0] \
+  [get_bd_pins hdmi_out_top/aclk] \
   [get_bd_pins ps7_0/M_AXI_GP0_ACLK] \
   [get_bd_pins rst_ps7_0_fclk0/slowest_sync_clk] \
   [get_bd_pins smartconnect_1/aclk] \
-  [get_bd_pins axi_gpio_0/s_axi_aclk] \
   [get_bd_pins v_frmbuf_rd_0/ap_clk] \
-  [get_bd_pins axis_dwidth_converter_0/aclk] \
-  [get_bd_pins axi_interconnect_0/S00_ACLK] \
-  [get_bd_pins clk_hdmi_720p/clk_in1] \
-  [get_bd_pins video_hdmi_out_top/aclk]
+  [get_bd_pins axi_interconnect_0/ACLK] \
+  [get_bd_pins axi_interconnect_0/S00_ACLK]
   connect_bd_net -net ps7_0_FCLK_CLK1  [get_bd_pins ps7_0/FCLK_CLK1] \
+  [get_bd_ports CLK_100] \
   [get_bd_pins ps7_0/S_AXI_HP0_ACLK] \
   [get_bd_pins rst_ps7_0_fclk1/slowest_sync_clk] \
-  [get_bd_ports CLK_100] \
-  [get_bd_pins axi_interconnect_0/ACLK] \
   [get_bd_pins axi_interconnect_0/M00_ACLK]
   connect_bd_net -net ps7_0_FCLK_RESET0_N  [get_bd_pins ps7_0/FCLK_RESET0_N] \
+  [get_bd_ports FCLK_RESETN] \
   [get_bd_pins rst_ps7_0_fclk0/ext_reset_in] \
-  [get_bd_pins rst_ps7_0_fclk1/ext_reset_in] \
-  [get_bd_ports FCLK_RESETN]
+  [get_bd_pins rst_ps7_0_fclk1/ext_reset_in]
   connect_bd_net -net ps7_0_GPIO_O  [get_bd_pins ps7_0/GPIO_O] \
   [get_bd_pins xlslice_0/Din]
+  connect_bd_net -net rgb2dvi_0_TMDS_Clk_n  [get_bd_pins hdmi_out_top/hdmi_out_clk_n] \
+  [get_bd_ports hdmi_out_clk_n]
+  connect_bd_net -net rgb2dvi_0_TMDS_Clk_p  [get_bd_pins hdmi_out_top/hdmi_out_clk_p] \
+  [get_bd_ports hdmi_out_clk_p]
+  connect_bd_net -net rgb2dvi_0_TMDS_Data_n  [get_bd_pins hdmi_out_top/hdmi_out_data_n] \
+  [get_bd_ports hdmi_out_data_n]
+  connect_bd_net -net rgb2dvi_0_TMDS_Data_p  [get_bd_pins hdmi_out_top/hdmi_out_data_p] \
+  [get_bd_ports hdmi_out_data_p]
   connect_bd_net -net rst_ps7_0_fclk0_interconnect_aresetn  [get_bd_pins rst_ps7_0_fclk0/interconnect_aresetn] \
+  [get_bd_pins hdmi_out_top/s_axi_aresetn] \
   [get_bd_pins smartconnect_1/aresetn] \
-  [get_bd_pins axi_gpio_0/s_axi_aresetn] \
+  [get_bd_pins axi_interconnect_0/ARESETN] \
   [get_bd_pins axi_interconnect_0/S00_ARESETN]
   connect_bd_net -net rst_ps7_0_fclk0_peripheral_aresetn  [get_bd_pins rst_ps7_0_fclk0/peripheral_aresetn] \
-  [get_bd_pins axis_dwidth_converter_0/aresetn] \
-  [get_bd_pins clk_hdmi_720p/resetn] \
-  [get_bd_pins video_hdmi_out_top/s_axi_aresetn]
+  [get_bd_pins hdmi_out_top/aresetn]
   connect_bd_net -net rst_ps7_0_fclk1_interconnect_aresetn  [get_bd_pins rst_ps7_0_fclk1/interconnect_aresetn] \
-  [get_bd_pins axi_interconnect_0/ARESETN] \
   [get_bd_pins axi_interconnect_0/M00_ARESETN]
   connect_bd_net -net v_frmbuf_rd_0_interrupt  [get_bd_pins v_frmbuf_rd_0/interrupt] \
   [get_bd_pins xlconcat_0/In0]
-  connect_bd_net -net video_hdmi_out_top_hdmi_out_clk_n  [get_bd_pins video_hdmi_out_top/hdmi_out_clk_n] \
-  [get_bd_ports hdmi_out_clk_n]
-  connect_bd_net -net video_hdmi_out_top_hdmi_out_clk_p  [get_bd_pins video_hdmi_out_top/hdmi_out_clk_p] \
-  [get_bd_ports hdmi_out_clk_p]
-  connect_bd_net -net video_hdmi_out_top_hdmi_out_data_n  [get_bd_pins video_hdmi_out_top/hdmi_out_data_n] \
-  [get_bd_ports hdmi_out_data_n]
-  connect_bd_net -net video_hdmi_out_top_hdmi_out_data_p  [get_bd_pins video_hdmi_out_top/hdmi_out_data_p] \
-  [get_bd_ports hdmi_out_data_p]
-  connect_bd_net -net video_hdmi_out_top_irq  [get_bd_pins video_hdmi_out_top/irq] \
-  [get_bd_pins xlconcat_0/In1]
   connect_bd_net -net xlconcat_0_dout  [get_bd_pins xlconcat_0/dout] \
   [get_bd_pins ps7_0/IRQ_F2P]
   connect_bd_net -net xlslice_0_Dout  [get_bd_pins xlslice_0/Dout] \
-  [get_bd_pins v_frmbuf_rd_0/ap_rst_n] \
-  [get_bd_ports LED2] \
-  [get_bd_pins video_hdmi_out_top/LED2]
+  [get_bd_pins v_frmbuf_rd_0/ap_rst_n]
+  connect_bd_net -net xlslice_1_Dout  [get_bd_pins xlslice_1/Dout] \
+  [get_bd_ports LED3]
 
   # Create address segments
-  assign_bd_address -offset 0x41200000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps7_0/Data] [get_bd_addr_segs axi_gpio_0/S_AXI/Reg] -force
+  assign_bd_address -offset 0x41200000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps7_0/Data] [get_bd_addr_segs hdmi_out_top/axi_gpio_0/S_AXI/Reg] -force
   assign_bd_address -offset 0x43C20000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps7_0/Data] [get_bd_addr_segs v_frmbuf_rd_0/s_axi_CTRL/Reg] -force
-  assign_bd_address -offset 0x43C10000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps7_0/Data] [get_bd_addr_segs video_hdmi_out_top/v_tc_0/ctrl/Reg] -force
+  assign_bd_address -offset 0x43C10000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps7_0/Data] [get_bd_addr_segs hdmi_out_top/v_tc_0/ctrl/Reg] -force
   assign_bd_address -offset 0x00000000 -range 0x20000000 -target_address_space [get_bd_addr_spaces v_frmbuf_rd_0/Data_m_axi_mm_video] [get_bd_addr_segs ps7_0/S_AXI_HP0/HP0_DDR_LOWOCM] -force
 
 

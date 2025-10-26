@@ -110,7 +110,9 @@ architecture rtl of pynq_z1_top is
       hdmi_out_ddc_sda_t : out STD_LOGIC;
       hdmi_out_hpd_tri_i : in std_logic_vector ( 0 downto 0 );
       
-      LED2               : out std_logic
+      LED2               : out std_logic;
+      LED3               : out std_logic;
+      LED4               : out std_logic
             
       
     );
@@ -181,7 +183,9 @@ begin
       hdmi_out_ddc_sda_o        => hdmi_out_ddc_sda_o,
       hdmi_out_ddc_sda_t        => hdmi_out_ddc_sda_t,
       
-      LED2                      => LED2      
+      LED2                      => LED2,
+      LED3                      => LED3,
+      LED4                      => LED4       
     );
     
     hdmi_hpd_sig(0) <= HDMI_HPD;
